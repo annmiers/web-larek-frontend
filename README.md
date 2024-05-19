@@ -43,6 +43,11 @@ yarn build
 ```
 ## Данные и типы данных, используемые в приложении
 
+Категории товаров
+```
+export type ProductCategory = 'софт-скил' | 'другое' | 'дополнительное' | 'кнопка' | 'хард-скил';
+```
+
 Товар
 ```
 export interface IProduct {
@@ -50,7 +55,7 @@ export interface IProduct {
     description: string;
     image: string;
     title: string;
-    category: string;
+    category: ProductCategory;
     price: number | null;
 }
 ```
@@ -58,7 +63,7 @@ export interface IProduct {
 ```
 export interface IAppState {
     catalog: IProduct[];
-    basket: string[];
+    basket: IProduct[];
     order: IOrder | null;
     preview: string | null;
 }
@@ -75,7 +80,8 @@ export interface IOrderForm {
 Заказ
 ```
 export interface IOrder extends IOrderForm {
-    items: IProduct[];
+    items: string[];
+    total: number;
 }
 ```
 Тип для отправки заказа на сервер
@@ -85,6 +91,10 @@ export interface IOrderResult {
     total: number;
 }
 ```
+Тип для ошибок формы
+```
+export type FormErrors = Partial<Record<keyof IOrder, string>>;
+```
 Тип для формы выбора оплаты и ввода адреса
 ```
 export type TOrderFormDelivery = Pick<IOrderForm, 'payment' | 'address'>;
@@ -93,6 +103,19 @@ export type TOrderFormDelivery = Pick<IOrderForm, 'payment' | 'address'>;
 ```
 export type TOrderFormContacts = Pick<IOrderForm, 'email' | 'phone'>;
 ```
+Типы запросов
+```
+export type ApiPostMethods = 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+```
+Интерфейс API
+```
+export interface IApi {
+    baseUrl: string;
+    get<T>(uri: string): Promise<T>;
+    post<T>(uri: string, data: object, method?: ApiPostMethods): Promise<T>;
+}
+```
+
 ## Архитектура приложения
 
 Код приложения разделен на слои согласно парадигме MVP: 
@@ -130,24 +153,30 @@ export type TOrderFormContacts = Pick<IOrderForm, 'email' | 'phone'>;
 #### Класс AppState
 Класс отвечает за хранение данных и логику работы всего приложения. Реализует интерфейс `IAppState`.\
 В полях класса хранятся следующие данные:
-- basket: string[] - массив товаров в корзине;
+- basket: Product[] - массив товаров в корзине;
 - catalog: Product[] - массив товаров в каталоге товаров (на главной странице);
 - order: IOrder - данные заказа (объект);
-- preview: string | null -id товара, выбранного для просмотра в модальном окне.
+- preview: string | null - id товара, выбранного для просмотра в модальном окне;
+- formErrors: FormErrors = {} - ошибки форм.
 
 Класс предоставляет следующий набор методов для взаимодействия с этими данными:
-- `getTotal()` - геттер для получения суммы заказа;
+- `clearBasket()` - метод для очистки корзины;
 - `setCatalog(Product[])` - сеттер для каталога товаров;
 - `setPreview(Product)` - сеттер для предпросмотра товара;
+- `addToBasket(Product)` - метод для добавления товара в корзину;
+- `deleteFromBasket(Product)` - метод для удаления товара из корзины;
+- `getBasketItems(): Product[]` - геттер для получения списка корзины;
+- `getTotal()` - геттер для получения суммы заказа;
+- `setOrderField(field: keyof IOrderForm, value: string)` - сеттер для заполнения полей объекта order;
 - `validateOrder()` - метод для валидации полей заказа (проверяем, что поля заполнены).
 
 ### Классы представления
 
 #### Класс Modal
-Реализует модальное окно. Так же предоставляет методы `open` и `close` для управления отображением модального окна.
+Реализует модальное окно. В конструктор принимает контейнер модального окна и брокер событий. Так же предоставляет методы `open` и `close` для управления отображением модального окна.
 
 #### Класс Form
-Предназначен для реализации формоы, содержащей поля ввода. При сабмите инициирует событие передавая в него объект с данными из полей ввода формы. При изменении данных в полях ввода инициирует событие изменения данных. Предоставляет методы для отображения ошибок и управления активностью кнопки сохранения.\
+Предназначен для реализации формы, содержащей поля ввода. При сабмите инициирует событие передавая в него объект с данными из полей ввода формы. При изменении данных в полях ввода инициирует событие изменения данных. Предоставляет методы для отображения ошибок и управления активностью кнопки сохранения.\
 Поля класса:
 - _submit: HTMLButtonElement - кнопка подтверждения;
 - _errors: HTMLElement - элемент для вывода ошибки при заполнении формы.
@@ -157,16 +186,17 @@ export type TOrderFormContacts = Pick<IOrderForm, 'email' | 'phone'>;
 - set valid(value: boolean) - сеттер для переключения состояния кнопки;
 - set errors(value: string) - сеттер для изменения текса ошибок.
 
-#### Класс FormDelivery
+#### Класс OrderDelivery
 Расширяет класс Form. Содержит сеттеры для полей формы "Оплата" и "Адрес".
 
-#### Класс FormContacts
+#### Класс OrderContacts
 Расширяет класс Form. Содержит сеттеры для полей формы "Телефон" и "Email".
 
-#### Класс ModalSuccess
+#### Класс Success
 Предназначен для реализации модального окна успешного оформления заказа.
 Поля класса:
-- _close: HTMLElement -кнопка закрытия модального окна.
+- _close: HTMLElement - кнопка закрытия модального окна;
+- _total: HTMLElement - элемент для вывода конечной суммы заказа. 
 
 #### Класс Page
 Предназначен для реализации главной страницы. Содержит сеттеры для отображения количества товаров в корзине возле иконки страницы, отображения каталога товаров, блокировки прокрутки.
@@ -174,7 +204,8 @@ export type TOrderFormContacts = Pick<IOrderForm, 'email' | 'phone'>;
 Поля класса:
 - _counter: HTMLElement - счетчик товаров в корзине;
 - _catalog: HTMLElement - каталог товаров;
-- _wrapper: HTMLElement - контейнер страницы.
+- _wrapper: HTMLElement - контейнер страницы;
+- _basket: HTMLElement - иконка корзины, при нажатии на которую инициируем событие окрытия корзины.
 
 #### Класс Basket
 Предназначен для реализации корзины товаров. Содержит сеттеры для отображения списка товаров в козине, суммы заказа, блокировки кнопки оформления заказа.
@@ -185,7 +216,7 @@ export type TOrderFormContacts = Pick<IOrderForm, 'email' | 'phone'>;
 - _button: HTMLElement - кнопка оформления заказа.
 
 #### Класс Card
-Преднезначен для реализации карточки товара. Содержит сеттеры и геттеры для полей класса.
+Преднезначен для реализации карточки товара. Содержит сеттеры и геттеры для полей класса, блокировки кнопки Купить, если товар уже в корзине.
 
 Поля класса:
 - _title : HTMLElement - название товара;
@@ -193,7 +224,8 @@ export type TOrderFormContacts = Pick<IOrderForm, 'email' | 'phone'>;
 - _description : HTMLElement - описание товара;
 - _category : HTMLElement - категория товара;
 - _price : HTMLElement - цена;
-- __button : HTMLButtonElement - кнопка покупки.
+- _button : HTMLButtonElement - кнопка покупки;
+-_itemIndex: HTMLElement - элемент для отображения номера товара в корзине.
 
 ### Слой коммуникации
 
@@ -208,15 +240,21 @@ export type TOrderFormContacts = Pick<IOrderForm, 'email' | 'phone'>;
 *Список всех событий, которые могут генерироваться в системе:*\
 *События изменения данных (генерируются классами моделями данных)*
 - `items:changed` - событие для генерации каталога товаров;
-- `preview:changed` - открытие модального окна предпросмотра товара;
-- `order:ready` - событие, сообщающее, что заказ валидирован.
+- `preview:open` - открытие модального окна предпросмотра товара;
+- `basket:change` - событие изменения корзины;
+- `order:ready` - событие, сообщающее, что заказ валидирован;
+- `formErrors:change` - событие изменения ошибок форм.
 
 *События, возникающие при взаимодействии пользователя с интерфейсом (генерируются классами, отвечающими за представление)*
 - `modal:open` - открытие модального окна;
 - `modal:close` - закрытие модального окна;
 - `basket:open` - открытие корзины;
-- `order-delivery:changed` - изменение данных в форме заказа
-- `order-contacts:changed` - изменение данных в форме заказа
-- `order:submit` - сохранение данных заказа.
+- `basket:add` - событие добавления товара в корзину;
+- `basket:delete` - событие удаления товара из корзины;
+- `order-delivery:open` - открытие модального окна заказа;
+- `order-delivery:changed` - изменение данных в форме заказа;
+- `order-contacts:changed` - изменение данных в форме заказа;
+- `order:submit` - сохранение данных формы доставаки;
+- `contacts:submit` - сохранение данных формы контактов и отправка запроса на сервер.
 
 
