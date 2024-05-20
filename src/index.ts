@@ -178,7 +178,6 @@ events.on('contacts:submit', () => {
             const success = new Success(cloneTemplate(successTemplate), {
                 onClick: () => {
                     modal.close();
-                    appData.clearBasket();
                 }
             });
             modal.render({
@@ -186,6 +185,7 @@ events.on('contacts:submit', () => {
                     total: appData.order.total
                 })
             });
+            appData.clearBasket();
         })
         .catch(err => {
             console.error(err);
